@@ -41,15 +41,25 @@
             margin-bottom: 10px;
         }
 
+        .drop-zones {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 30px;
+        }
+
         .drop-zone {
             border: 3px dashed #667eea;
             border-radius: 8px;
             padding: 60px 20px;
-            margin: 30px;
             text-align: center;
             background: #f8f9ff;
             transition: all 0.3s;
             cursor: pointer;
+        }
+
+        .drop-zone.small {
+            padding: 40px 20px;
         }
 
         .drop-zone.dragover {
@@ -276,10 +286,18 @@
             <p>履歴書Wordファイルをドラッグ&ドロップしてデータを抽出</p>
         </div>
 
-        <div class="drop-zone" id="dropZone">
-            <p>📁 ここに履歴書ファイルをドラッグ&ドロップ</p>
-            <p style="font-size: 0.9em; color: #999;">または、クリックしてファイルを選択</p>
-            <input type="file" id="fileInput" accept=".docx" multiple style="display: none;">
+        <div class="drop-zones">
+            <div class="drop-zone" id="dropZone">
+                <p>📁 ここに履歴書ファイルをドラッグ&ドロップ</p>
+                <p style="font-size: 0.9em; color: #999;">または、クリックしてファイルを選択</p>
+                <input type="file" id="fileInput" accept=".docx" multiple style="display: none;">
+            </div>
+            <div class="drop-zone small" id="templateDropZone">
+                <p>🧩 テンプレートファイル（.docx）をドラッグ&ドロップ</p>
+                <p style="font-size: 0.9em; color: #999;">または、クリックしてファイルを選択</p>
+                <input type="file" id="templateInput" accept=".docx" style="display: none;">
+                <div id="templateInfo" style="margin-top: 10px; color: #667eea; font-weight: bold;">テンプレート未選択</div>
+            </div>
         </div>
 
         <div id="fileList" class="file-list"></div>
@@ -295,13 +313,18 @@
     <script>
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
+        const templateDropZone = document.getElementById('templateDropZone');
+        const templateInput = document.getElementById('templateInput');
+        const templateInfo = document.getElementById('templateInfo');
         const fileList = document.getElementById('fileList');
         const extractBtn = document.getElementById('extractBtn');
         const tabs = document.getElementById('tabs');
         const tabContents = document.getElementById('tabContents');
         let files = [];
+        let templateFile = null;
 
         dropZone.addEventListener('click', () => fileInput.click());
+        templateDropZone.addEventListener('click', () => templateInput.click());
 
         dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -322,10 +345,43 @@
             handleFiles(e.target.files);
         });
 
+        templateDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            templateDropZone.classList.add('dragover');
+        });
+
+        templateDropZone.addEventListener('dragleave', () => {
+            templateDropZone.classList.remove('dragover');
+        });
+
+        templateDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            templateDropZone.classList.remove('dragover');
+            handleTemplateFile(e.dataTransfer.files);
+        });
+
+        templateInput.addEventListener('change', (e) => {
+            handleTemplateFile(e.target.files);
+        });
+
         function handleFiles(newFiles) {
             const wordFiles = Array.from(newFiles).filter(f => f.name.endsWith('.docx'));
             files = [...files, ...wordFiles];
             displayFileList();
+        }
+
+        function handleTemplateFile(fileList) {
+            const wordFile = Array.from(fileList || []).find(f => f.name.endsWith('.docx'));
+            if (wordFile) {
+                templateFile = wordFile;
+                templateInfo.textContent = `選択中: ${wordFile.name}`;
+                templateInfo.style.color = '#667eea';
+            } else {
+                templateFile = null;
+                templateInfo.textContent = 'テンプレート未選択';
+                templateInfo.style.color = '#999';
+            }
+            updateWriteButtons();
         }
 
         function displayFileList() {
@@ -343,6 +399,22 @@
             `).join('');
 
             extractBtn.style.display = 'block';
+        }
+
+        function updateWriteButtons() {
+            const buttons = document.querySelectorAll('.write-btn');
+            buttons.forEach(btn => {
+                if (!btn.dataset.enabledText) {
+                    btn.dataset.enabledText = btn.textContent;
+                }
+                if (templateFile) {
+                    btn.disabled = false;
+                    btn.textContent = btn.dataset.enabledText;
+                } else {
+                    btn.disabled = true;
+                    btn.textContent = 'テンプレートを選択してください';
+                }
+            });
         }
 
         function removeFile(index) {
@@ -1032,22 +1104,22 @@
                     extractedData.push({ filename: file.name, data: data });
 
                     content.innerHTML = `
-                        <button id="writeDocx${i}" class="extract-btn">
+                        <button id="writeDocx${i}" class="extract-btn write-btn" data-enabled-text="📃新規ワードに書き込み">
                             📃新規ワードに書き込み
                         </button>
                         <div id="view-${i}">
                             ${renderResumeData(data)}
                         </div>
                     `;
-                    document.querySelector(`#writeDocx${i}`).addEventListener('click', e => {
-                        const input = document.createElement('input');
-                        input.type = 'file';
-                        input.accept = '.docx';
-                        input.onchange = async (e) => {
-                            await writeResumeData(e.target.files[0], file, data);
+                    const writeBtn = document.querySelector(`#writeDocx${i}`);
+                    writeBtn.addEventListener('click', async () => {
+                        if (!templateFile) {
+                            alert('先にテンプレートファイル（.docx）を選択してください。');
+                            return;
                         }
-                        input.click();
-                    })
+                        await writeResumeData(templateFile, file, data);
+                    });
+                    updateWriteButtons();
                 } catch (error) {
                     console.log(error);
                     content.innerHTML = `<div style="color: red; padding: 20px;">エラー: ${error.message}</div>`;
