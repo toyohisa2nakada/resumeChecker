@@ -785,12 +785,14 @@
             const run = templateXmlDoc.createElementNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "w:r");
             run.appendChild(importedDrawing);
 
-            // 既存の内容をクリア（オプション）
-            while (targetParagraph.firstChild) {
-                targetParagraph.removeChild(targetParagraph.firstChild);
-            }
+            const targetRuns = Array.from(targetParagraph.getElementsByTagName("w:r"));
+            const existingDrawingRun = targetRuns.find(r => r.getElementsByTagName("w:drawing").length > 0);
 
-            targetParagraph.appendChild(run);
+            if (existingDrawingRun) {
+                targetParagraph.replaceChild(run, existingDrawingRun);
+            } else {
+                targetParagraph.appendChild(run);
+            }
 
             // document.xmlを更新（XML宣言付き）
             const updatedDocXml = serializeXmlWithDeclaration(templateXmlDoc);
