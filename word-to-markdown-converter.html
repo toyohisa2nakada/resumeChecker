@@ -548,13 +548,28 @@
 
             // 4. 画像ファイルをコピー
             const imageData = await sourceZip.file(`word/media/${imageFileName}`).async("blob");
-            templateZip.file(`word/media/${imageFileName}`, imageData);
+
+            const extension = imageFileName.split('.').pop()?.toLowerCase();
+            const generateUniqueImageFileName = () => {
+                const baseName = `photo_${Date.now()}`;
+                let uniqueName = extension ? `${baseName}.${extension}` : baseName;
+                let counter = 1;
+
+                while (templateZip.file(`word/media/${uniqueName}`)) {
+                    uniqueName = extension ? `${baseName}_${counter}.${extension}` : `${baseName}_${counter}`;
+                    counter += 1;
+                }
+
+                return uniqueName;
+            };
+
+            const uniqueImageFileName = generateUniqueImageFileName();
+            templateZip.file(`word/media/${uniqueImageFileName}`, imageData);
 
             // [Content_Types].xml に画像の ContentType を登録
             const contentTypesXml = await templateZip.file("[Content_Types].xml").async("text");
             const contentTypesDoc = sourceParser.parseFromString(contentTypesXml, "text/xml");
 
-            const extension = imageFileName.split('.').pop()?.toLowerCase();
             const extensionToContentType = {
                 bmp: "image/bmp",
                 gif: "image/gif",
@@ -586,20 +601,38 @@
             const templateRelsDoc = sourceParser.parseFromString(templateRelsXml, "text/xml");
             const templateRelationships = templateRelsDoc.getElementsByTagName("Relationship");
 
-            // 新しいrIdを生成
-            let maxRId = 0;
+            // 既存の同じターゲットを削除
+            const relationshipsArray = Array.from(templateRelationships);
+            for (let rel of relationshipsArray) {
+                if (rel.getAttribute("Target") === `media/${uniqueImageFileName}`) {
+                    rel.parentNode?.removeChild(rel);
+                }
+            }
+
+            // 新しいrIdを生成（既存のIdと重複しない最小の数値を採番）
+            const existingIds = new Set(Array.from(templateRelationships).map(rel => rel.getAttribute("Id")));
+
+            let counter = 1;
             for (let rel of templateRelationships) {
                 const id = rel.getAttribute("Id");
-                const num = parseInt(id.replace("rId", ""));
-                if (num > maxRId) maxRId = num;
+                const numericPart = id?.startsWith("rId") ? parseInt(id.slice(3), 10) : NaN;
+
+                if (!Number.isNaN(numericPart) && numericPart >= counter) {
+                    counter = numericPart + 1;
+                }
             }
-            const newRId = `rId${maxRId + 1}`;
+
+            while (existingIds.has(`rId${counter}`)) {
+                counter += 1;
+            }
+
+            const newRId = `rId${counter}`;
 
             // リレーションシップを追加
             const newRel = templateRelsDoc.createElement("Relationship");
             newRel.setAttribute("Id", newRId);
             newRel.setAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
-            newRel.setAttribute("Target", `media/${imageFileName}`);
+            newRel.setAttribute("Target", `media/${uniqueImageFileName}`);
             templateRelsDoc.documentElement.appendChild(newRel);
 
             // リレーションシップファイルを更新（XML宣言付き）
