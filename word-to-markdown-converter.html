@@ -550,6 +550,37 @@
             const imageData = await sourceZip.file(`word/media/${imageFileName}`).async("blob");
             templateZip.file(`word/media/${imageFileName}`, imageData);
 
+            // [Content_Types].xml に画像の ContentType を登録
+            const contentTypesXml = await templateZip.file("[Content_Types].xml").async("text");
+            const contentTypesDoc = sourceParser.parseFromString(contentTypesXml, "text/xml");
+
+            const extension = imageFileName.split('.').pop()?.toLowerCase();
+            const extensionToContentType = {
+                bmp: "image/bmp",
+                gif: "image/gif",
+                jpeg: "image/jpeg",
+                jpg: "image/jpeg",
+                png: "image/png",
+                tif: "image/tiff",
+                tiff: "image/tiff"
+            };
+            const contentType = extension ? extensionToContentType[extension] || `image/${extension}` : null;
+
+            if (extension && contentType) {
+                const defaults = contentTypesDoc.getElementsByTagName("Default");
+                const hasContentType = Array.from(defaults).some(defaultEl => defaultEl.getAttribute("Extension")?.toLowerCase() === extension);
+
+                if (!hasContentType) {
+                    const newDefault = contentTypesDoc.createElement("Default");
+                    newDefault.setAttribute("Extension", extension);
+                    newDefault.setAttribute("ContentType", contentType);
+                    contentTypesDoc.documentElement.appendChild(newDefault);
+
+                    const updatedContentTypesXml = serializeXmlWithDeclaration(contentTypesDoc);
+                    templateZip.file("[Content_Types].xml", updatedContentTypesXml);
+                }
+            }
+
             // 5. テンプレートのリレーションシップに画像を追加
             const templateRelsXml = await templateZip.file("word/_rels/document.xml.rels").async("text");
             const templateRelsDoc = sourceParser.parseFromString(templateRelsXml, "text/xml");
