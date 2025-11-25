@@ -218,6 +218,7 @@
         }
 
         .json-view {
+            width: 100%;
             background: #2d2d2d;
             color: #f8f8f2;
             padding: 20px;
@@ -225,6 +226,10 @@
             font-family: 'Courier New', monospace;
             overflow-x: auto;
             margin-top: 20px;
+            min-height: 260px;
+            border: none;
+            resize: vertical;
+            white-space: pre;
         }
 
         .loading {
@@ -556,11 +561,25 @@
             return resumeData;
         }
 
-        function renderResumeData(data) {
+        function debounceInput(callback, delay = 1000) {
+            let timerId;
+            return (...args) => {
+                if (timerId) {
+                    clearTimeout(timerId);
+                }
+                timerId = setTimeout(() => callback(...args), delay);
+            };
+        }
+
+        function renderResumeData(data, index) {
+            const jsonString = JSON.stringify(data, null, 2);
             return `
-                <div class="json-view">
-                    <pre>${JSON.stringify(data, null, 2)}</pre>
-                </div>
+                <textarea
+                    class="json-view"
+                    data-tab-index="${index}"
+                    data-content-id="content-${index}"
+                    aria-label="Extracted resume JSON for tab ${index + 1}"
+                >${jsonString}</textarea>
             `;
         }
 
@@ -1136,7 +1155,7 @@
                             📃新規ワードに書き込み
                         </button>
                         <div id="view-${i}">
-                            ${renderResumeData(data)}
+                            ${renderResumeData(data, i)}
                         </div>
                     `;
                     const writeBtn = document.querySelector(`#writeDocx${i}`);
@@ -1145,8 +1164,20 @@
                             alert('先にテンプレートファイル（.docx）を選択してください。');
                             return;
                         }
-                        await writeResumeData(templateFile, file, data);
+                        await writeResumeData(templateFile, file, extractedData[i].data);
                     });
+                    const editor = document.querySelector(`#view-${i} .json-view`);
+                    if (editor) {
+                        const debouncedUpdate = debounceInput(() => {
+                            try {
+                                const parsedData = JSON.parse(editor.value);
+                                extractedData[i].data = parsedData;
+                            } catch (error) {
+                                alert('無効なJSONです。内容を確認してください。');
+                            }
+                        }, 1000);
+                        editor.addEventListener('input', () => debouncedUpdate());
+                    }
                     updateWriteButtons();
                 } catch (error) {
                     console.log(error);
