@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>履歴書データ抽出ツール</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .drop-zones {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 30px;
+        }
+
+        .drop-zone {
+            border: 3px dashed #667eea;
+            border-radius: 8px;
+            padding: 60px 20px;
+            text-align: center;
+            background: #f8f9ff;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .drop-zone.small {
+            padding: 40px 20px;
+        }
+
+        .drop-zone.dragover {
+            background: #e8ebff;
+            border-color: #764ba2;
+            transform: scale(1.02);
+        }
+
+        .drop-zone p {
+            font-size: 1.2em;
+            color: #667eea;
+            margin: 10px 0;
+        }
+
+        .file-list {
+            margin: 0 30px 30px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: #f5f5f5;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+
+        .file-item span {
+            flex: 1;
+        }
+
+        .extract-btn {
+            display: block;
+            margin: 0 30px 30px;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .extract-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .extract-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f0f0f0;
+            overflow-x: auto;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .tab {
+            padding: 15px 25px;
+            background: #e0e0e0;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.3s;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            margin-right: 4px;
+        }
+
+        .tab:hover {
+            background: #d0d0d0;
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 30px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .data-display {
+            display: grid;
+            gap: 20px;
+        }
+
+        .section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .section h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .field {
+            margin: 10px 0;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .field:last-child {
+            border-bottom: none;
+        }
+
+        .field-label {
+            font-weight: bold;
+            color: #555;
+            display: inline-block;
+            min-width: 150px;
+        }
+
+        .field-value {
+            color: #333;
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .history-table th,
+        .history-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+
+        .history-table th {
+            background: #667eea;
+            color: white;
+        }
+
+        .history-table tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+
+        .json-view {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* .view-toggle {
+            margin-bottom: 20px;
+        }
+
+        .view-toggle button {
+            padding: 10px 20px;
+            margin-right: 10px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .view-toggle button:hover {
+            background: #764ba2;
+        }
+
+        .view-toggle button.active {
+            background: #764ba2;
+            font-weight: bold;
+        } */
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📄 履歴書データ抽出ツール</h1>
+            <p>履歴書Wordファイルをドラッグ&ドロップしてデータを抽出</p>
+        </div>
+
+        <div class="drop-zones">
+            <div class="drop-zone" id="dropZone">
+                <p>📁 ここに履歴書ファイルをドラッグ&ドロップ</p>
+                <p style="font-size: 0.9em; color: #999;">または、クリックしてファイルを選択</p>
+                <input type="file" id="fileInput" accept=".docx" multiple style="display: none;">
+            </div>
+            <div class="drop-zone small" id="templateDropZone">
+                <p>🧩 テンプレートファイル（.docx）をドラッグ&ドロップ</p>
+                <p style="font-size: 0.9em; color: #999;">または、クリックしてファイルを選択</p>
+                <input type="file" id="templateInput" accept=".docx" style="display: none;">
+                <div id="templateInfo" style="margin-top: 10px; color: #667eea; font-weight: bold;">テンプレート未選択</div>
+            </div>
+        </div>
+
+        <div id="fileList" class="file-list"></div>
+
+        <button id="extractBtn" class="extract-btn" style="display: none;">
+            ✓ データ抽出を開始
+        </button>
+
+        <button id="writeAllBtn" class="extract-btn" style="display: none;">
+            📝 すべてのファイルをテンプレートに書き込み
+        </button>
+
+        <div id="tabs" class="tabs" style="display: none;"></div>
+        <div id="tabContents"></div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const templateDropZone = document.getElementById('templateDropZone');
+        const templateInput = document.getElementById('templateInput');
+        const templateInfo = document.getElementById('templateInfo');
+        const fileList = document.getElementById('fileList');
+        const extractBtn = document.getElementById('extractBtn');
+        const writeAllBtn = document.getElementById('writeAllBtn');
+        const tabs = document.getElementById('tabs');
+        const tabContents = document.getElementById('tabContents');
+        let files = [];
+        let templateFile = null;
+        let extractedData = [];
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        templateDropZone.addEventListener('click', () => templateInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        templateDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            templateDropZone.classList.add('dragover');
+        });
+
+        templateDropZone.addEventListener('dragleave', () => {
+            templateDropZone.classList.remove('dragover');
+        });
+
+        templateDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            templateDropZone.classList.remove('dragover');
+            handleTemplateFile(e.dataTransfer.files);
+        });
+
+        templateInput.addEventListener('change', (e) => {
+            handleTemplateFile(e.target.files);
+        });
+
+        function handleFiles(newFiles) {
+            const wordFiles = Array.from(newFiles).filter(f => f.name.endsWith('.docx'));
+            files = [...files, ...wordFiles];
+            displayFileList();
+        }
+
+        function handleTemplateFile(fileList) {
+            const wordFile = Array.from(fileList || []).find(f => f.name.endsWith('.docx'));
+            if (wordFile) {
+                templateFile = wordFile;
+                templateInfo.textContent = `選択中: ${wordFile.name}`;
+                templateInfo.style.color = '#667eea';
+            } else {
+                templateFile = null;
+                templateInfo.textContent = 'テンプレート未選択';
+                templateInfo.style.color = '#999';
+            }
+            updateWriteButtons();
+            updateWriteAllButton();
+        }
+
+        function displayFileList() {
+            if (files.length === 0) {
+                fileList.innerHTML = '';
+                extractBtn.style.display = 'none';
+                return;
+            }
+
+            fileList.innerHTML = files.map((f, i) => `
+                <div class="file-item">
+                    <span>${f.name}</span>
+                    <button onclick="removeFile(${i})" style="background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">削除</button>
+                </div>
+            `).join('');
+
+            extractBtn.style.display = 'block';
+        }
+
+        function updateWriteButtons() {
+            const buttons = document.querySelectorAll('.write-btn');
+            buttons.forEach(btn => {
+                if (!btn.dataset.enabledText) {
+                    btn.dataset.enabledText = btn.textContent;
+                }
+                if (templateFile) {
+                    btn.disabled = false;
+                    btn.textContent = btn.dataset.enabledText;
+                } else {
+                    btn.disabled = true;
+                    btn.textContent = 'テンプレートを選択してください';
+                }
+            });
+        }
+
+        function updateWriteAllButton() {
+            if (extractedData.length === 0) {
+                writeAllBtn.style.display = 'none';
+                return;
+            }
+
+            writeAllBtn.style.display = 'block';
+
+            if (!writeAllBtn.dataset.enabledText) {
+                writeAllBtn.dataset.enabledText = writeAllBtn.textContent;
+            }
+
+            if (templateFile) {
+                writeAllBtn.disabled = false;
+                writeAllBtn.textContent = writeAllBtn.dataset.enabledText;
+            } else {
+                writeAllBtn.disabled = true;
+                writeAllBtn.textContent = 'テンプレートを選択してください';
+            }
+        }
+
+        function removeFile(index) {
+            files.splice(index, 1);
+            displayFileList();
+        }
+
+        String.prototype.includesAll = function (chars) {
+            return chars.split('').every(char => this.includes(char));
+        };
+
+        // Wordファイルからテーブルのセルテキストを取得する関数
+        async function extractResumeData(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const zip = await JSZip.loadAsync(arrayBuffer);
+
+            // document.xmlを取得
+            const docXml = await zip.file("word/document.xml").async("text");
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(docXml, "text/xml");
+
+            // テーブルを取得
+            const tables = xmlDoc.getElementsByTagName("w:tbl");
+            if (tables.length === 0) {
+                throw new Error("テーブルが見つかりません");
+            }
+
+            // 最初のテーブル(TABLE 0)から全セルのテキストを抽出
+            const table = tables[0];
+            const rows = table.getElementsByTagName("w:tr");
+            const cellTexts = [];
+
+            for (let row of rows) {
+                const cells = row.getElementsByTagName("w:tc");
+                for (let cell of cells) {
+                    const textElements = cell.getElementsByTagName("w:t");
+                    let cellText = "";
+                    for (let t of textElements) {
+                        cellText += t.textContent;
+                    }
+                    cellTexts.push(cellText);
+                }
+            }
+
+            console.log(cellTexts)
+
+            const resumeData = {
+                作成日: cellTexts[1].split("写真")[0].trim() || "",
+                基本情報: {
+                    ふりがな: cellTexts[3].trim() || "",
+                    氏名: cellTexts[5].trim() || "",
+                    生年月日年齢: cellTexts[6].trim() || "",
+                    現住所ふりがな: cellTexts[8].trim() || "",
+                    現住所郵便番号: cellTexts[9].match(/[（(](.*?)[)）]/)?.[1].trim() || "",
+                    現住所: cellTexts[10].trim() || "",
+                    Email: cellTexts[12].trim() || "",
+                    電話: cellTexts[14].trim() || ""
+                },
+                学歴: [],
+                職歴: [],
+                免許資格: [],
+                学生生活: "",
+                自己PR: ""
+            };
+
+
+            let line = 15;
+            while (cellTexts[line] !== undefined && !cellTexts[line].includesAll("学歴職歴")) line += 1;
+            if (line >= cellTexts.length) {
+                console.log(`学歴・職歴の欄がありません。 ${file.name}`);
+                return resumeData;
+            }
+            line += 1;
+
+            // 学歴・職歴データの抽出
+            let histType = "学歴"
+            for (; cellTexts[line + 2] !== undefined && [0, 1, 2].every(e => !cellTexts[line + e].includesAll("学生生活において力を入れていること")); line += 3) {
+                const year = cellTexts[line].trim();
+                const month = cellTexts[line + 1].trim();
+                const content = cellTexts[line + 2].trim();
+
+                for (let htype of ["職歴", "免許資格"]) {
+                    if (content.includesAll(htype)) {
+                        histType = htype;
+                        break;
+                    }
+                }
+                if (content.length > 0 && ["学歴", "職歴", "免許資格", "なし", "以上"].every(e => !content.includesAll(e))) {
+                    if (year.length === 0 && month.length === 0 && resumeData[histType].length > 0) {
+                        resumeData[histType][resumeData[histType].length - 1].内容 += ` ${content}`;
+                    } else {
+                        resumeData[histType].push({
+                            年: year,
+                            月: month,
+                            内容: content
+                        })
+                    }
+                }
+            }
+
+            for (; line < cellTexts.length; line += 1) {
+                for (let ptype of ["学生生活", "自己PR"]) {
+                    if (cellTexts[line].includesAll(ptype)) {
+                        resumeData[ptype] = cellTexts[line + 1];
+                        line += 1;
+                        break;
+                    }
+                }
+            }
+
+            return resumeData;
+        }
+
+        function renderResumeData(data) {
+            return `
+                <div class="json-view">
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                </div>
+            `;
+        }
+
+        async function copyImageToTemplate(sourceFile, templateFile, resumeData) {
+            const sourceArrayBuffer = await sourceFile.arrayBuffer();
+            const sourceZip = await JSZip.loadAsync(sourceArrayBuffer);
+
+            const templateArrayBuffer = await templateFile.arrayBuffer();
+            const templateZip = await JSZip.loadAsync(templateArrayBuffer);
+
+            // 1. ソースファイルから画像とその位置情報を取得
+            const sourceDocXml = await sourceZip.file("word/document.xml").async("text");
+            const sourceParser = new DOMParser();
+            const sourceXmlDoc = sourceParser.parseFromString(sourceDocXml, "text/xml");
+
+            // 画像のdrawing要素を取得
+            const sourceDrawings = sourceXmlDoc.getElementsByTagName("w:drawing");
+            if (sourceDrawings.length === 0) {
+                console.log("画像が見つかりません");
+                return templateZip;
+            }
+
+            const sourceDrawing = sourceDrawings[0];
+
+            // 画像の参照ID（rId）を取得
+            const blips = sourceDrawing.getElementsByTagName("a:blip");
+            if (blips.length === 0) {
+                console.log("画像が見つかりません");
+                return templateZip;
+            }
+
+            const firstBlip = blips[0];
+            const sourceImageRId = firstBlip.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "embed");
+
+            // 2. 画像が含まれているセルのインデックスを特定
+            const sourceTables = sourceXmlDoc.getElementsByTagName("w:tbl");
+            let sourceCellIndex = -1;
+
+            if (sourceTables.length > 0) {
+                const sourceTable = sourceTables[0];
+                const sourceRows = sourceTable.getElementsByTagName("w:tr");
+                const sourceCells = [];
+
+                for (let row of sourceRows) {
+                    const rowCells = row.getElementsByTagName("w:tc");
+                    for (let cell of rowCells) {
+                        sourceCells.push(cell);
+                    }
+                }
+
+                // どのセルに画像が含まれているか探す
+                for (let i = 0; i < sourceCells.length; i++) {
+                    const cellDrawings = sourceCells[i].getElementsByTagName("w:drawing");
+                    if (cellDrawings.length > 0) {
+                        sourceCellIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            if (sourceCellIndex === -1) {
+                console.log("画像を含むセルが見つかりません");
+                return templateZip;
+            }
+
+            console.log(`画像はセルインデックス ${sourceCellIndex} にあります`);
+
+            // 3. リレーションシップファイルから画像のパスを取得
+            const sourceRelsXml = await sourceZip.file("word/_rels/document.xml.rels").async("text");
+            const sourceRelsDoc = sourceParser.parseFromString(sourceRelsXml, "text/xml");
+            const sourceRelationships = sourceRelsDoc.getElementsByTagName("Relationship");
+
+            let imageFileName = null;
+            for (let rel of sourceRelationships) {
+                if (rel.getAttribute("Id") === sourceImageRId) {
+                    imageFileName = rel.getAttribute("Target").replace("media/", "");
+                    break;
+                }
+            }
+
+            if (!imageFileName) {
+                console.log("画像ファイルが見つかりません");
+                return templateZip;
+            }
+
+            // 4. 画像ファイルをコピー
+            const imageData = await sourceZip.file(`word/media/${imageFileName}`).async("blob");
+
+            const extension = imageFileName.split('.').pop()?.toLowerCase();
+            const generateUniqueImageFileName = () => {
+                const baseName = `photo_${Date.now()}`;
+                let uniqueName = extension ? `${baseName}.${extension}` : baseName;
+                let counter = 1;
+
+                while (templateZip.file(`word/media/${uniqueName}`)) {
+                    uniqueName = extension ? `${baseName}_${counter}.${extension}` : `${baseName}_${counter}`;
+                    counter += 1;
+                }
+
+                return uniqueName;
+            };
+
+            const uniqueImageFileName = generateUniqueImageFileName();
+            templateZip.file(`word/media/${uniqueImageFileName}`, imageData);
+
+            // [Content_Types].xml に画像の ContentType を登録
+            const contentTypesXml = await templateZip.file("[Content_Types].xml").async("text");
+            const contentTypesDoc = sourceParser.parseFromString(contentTypesXml, "text/xml");
+
+            const mediaExtensions = getMediaExtensions(templateZip);
+            if (extension) {
+                mediaExtensions.add(extension);
+            }
+
+            const updatedContentTypesXml = ensureImageContentTypes(contentTypesDoc, mediaExtensions);
+            if (updatedContentTypesXml) {
+                templateZip.file("[Content_Types].xml", updatedContentTypesXml);
+            }
+
+            // 5. テンプレートのリレーションシップに画像を追加
+            const templateRelsXml = await templateZip.file("word/_rels/document.xml.rels").async("text");
+            const templateRelsDoc = sourceParser.parseFromString(templateRelsXml, "text/xml");
+            const templateRelationships = templateRelsDoc.getElementsByTagName("Relationship");
+
+            // 既存の同じターゲットを削除
+            const relationshipsArray = Array.from(templateRelationships);
+            for (let rel of relationshipsArray) {
+                if (rel.getAttribute("Target") === `media/${uniqueImageFileName}`) {
+                    rel.parentNode?.removeChild(rel);
+                }
+            }
+
+            // 新しいrIdを生成
+            let maxRId = 0;
+            for (let rel of templateRelationships) {
+                const id = rel.getAttribute("Id");
+                const num = parseInt(id.replace("rId", ""));
+                if (num > maxRId) maxRId = num;
+            }
+            const newRId = `rId${maxRId + 1}`;
+
+            // リレーションシップを追加（名前空間を保持して xmlns="" を防ぐ）
+            const relNamespace = templateRelsDoc.documentElement.namespaceURI;
+            const newRel = relNamespace
+                ? templateRelsDoc.createElementNS(relNamespace, "Relationship")
+                : templateRelsDoc.createElement("Relationship");
+
+            newRel.setAttribute("Id", newRId);
+            newRel.setAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
+            newRel.setAttribute("Target", `media/${uniqueImageFileName}`);
+            templateRelsDoc.documentElement.appendChild(newRel);
+
+            const missingMedia = validateImageRelationshipTargets(templateZip, templateRelsDoc.getElementsByTagName("Relationship"));
+            if (missingMedia.length > 0) {
+                throw new Error(`以下の画像ファイルが見つかりません: ${missingMedia.join(', ')}`);
+            }
+
+            // リレーションシップファイルを更新（XML宣言付き）
+            const updatedRelsXml = serializeXmlWithDeclaration(templateRelsDoc);
+            templateZip.file("word/_rels/document.xml.rels", updatedRelsXml);
+
+            // 6. テンプレートのdocument.xmlに画像を挿入（同じセル位置に）
+            const templateDocXml = await templateZip.file("word/document.xml").async("text");
+            const templateXmlDoc = sourceParser.parseFromString(templateDocXml, "text/xml");
+
+            const tables = templateXmlDoc.getElementsByTagName("w:tbl");
+            if (tables.length === 0) {
+                return templateZip;
+            }
+
+            const table = tables[0];
+            const rows = table.getElementsByTagName("w:tr");
+            const cells = [];
+
+            for (let row of rows) {
+                const rowCells = row.getElementsByTagName("w:tc");
+                for (let cell of rowCells) {
+                    cells.push(cell);
+                }
+            }
+
+            if (sourceCellIndex >= cells.length) {
+                console.log("テンプレートに対応するセルが見つかりません");
+                return templateZip;
+            }
+
+            const targetCell = cells[sourceCellIndex];
+            const targetParagraph = targetCell.getElementsByTagName("w:p")[0];
+
+            // ソースから画像のXMLをそのままクローン
+            const clonedDrawing = sourceDrawing.cloneNode(true);
+
+            // クローンした画像のrIdを新しいものに置き換え
+            const clonedBlips = clonedDrawing.getElementsByTagName("a:blip");
+            for (let blip of clonedBlips) {
+                blip.setAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "r:embed", newRId);
+            }
+
+            // XMLドキュメント間でノードをインポート
+            const importedDrawing = templateXmlDoc.importNode(clonedDrawing, true);
+
+            // 画像を段落に追加
+            const run = templateXmlDoc.createElementNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "w:r");
+            run.appendChild(importedDrawing);
+
+            // 既存の内容をクリア（オプション）
+            while (targetParagraph.firstChild) {
+                targetParagraph.removeChild(targetParagraph.firstChild);
+            }
+
+            targetParagraph.appendChild(run);
+
+            // document.xmlを更新（XML宣言付き）
+            const updatedDocXml = serializeXmlWithDeclaration(templateXmlDoc);
+            templateZip.file("word/document.xml", updatedDocXml);
+
+            return templateZip;
+        }
+
+        function getMediaExtensions(zip) {
+            const extensions = new Set();
+            const mediaFolder = zip.folder("word/media");
+
+            mediaFolder?.forEach((relativePath, file) => {
+                if (file.dir) return;
+
+                const parts = relativePath.split('.');
+                if (parts.length > 1) {
+                    extensions.add(parts.pop().toLowerCase());
+                }
+            });
+
+            return extensions;
+        }
+
+        function ensureImageContentTypes(contentTypesDoc, extensions) {
+            const extensionToContentType = {
+                bmp: "image/bmp",
+                gif: "image/gif",
+                jpeg: "image/jpeg",
+                jpg: "image/jpeg",
+                png: "image/png",
+                tif: "image/tiff",
+                tiff: "image/tiff"
+            };
+
+            const defaults = Array.from(contentTypesDoc.getElementsByTagName("Default"));
+            const existingExtensions = new Set(defaults
+                .map(defaultEl => defaultEl.getAttribute("Extension")?.toLowerCase())
+                .filter(Boolean));
+
+            const namespace = contentTypesDoc.documentElement.namespaceURI;
+            let updated = false;
+
+            extensions.forEach(ext => {
+                if (existingExtensions.has(ext)) return;
+
+                const contentType = extensionToContentType[ext] || `image/${ext}`;
+                const newDefault = namespace
+                    ? contentTypesDoc.createElementNS(namespace, "Default")
+                    : contentTypesDoc.createElement("Default");
+
+                newDefault.setAttribute("Extension", ext);
+                newDefault.setAttribute("ContentType", contentType);
+                contentTypesDoc.documentElement.appendChild(newDefault);
+                existingExtensions.add(ext);
+                updated = true;
+            });
+
+            return updated ? serializeXmlWithDeclaration(contentTypesDoc) : null;
+        }
+
+        function validateImageRelationshipTargets(zip, relationships) {
+            const missingMedia = [];
+
+            Array.from(relationships).forEach(rel => {
+                const target = rel.getAttribute("Target");
+                if (!target || !target.startsWith("media/")) return;
+
+                const normalizedTarget = target.replace(/^\//, "");
+                if (!zip.file(`word/${normalizedTarget}`)) {
+                    missingMedia.push(normalizedTarget);
+                }
+            });
+
+            return missingMedia;
+        }
+
+        // XML宣言付きでシリアライズする関数
+        function serializeXmlWithDeclaration(xmlDoc) {
+            const serializer = new XMLSerializer();
+            let xmlString = serializer.serializeToString(xmlDoc);
+
+            // 既存のXML宣言を削除してから新しいものを追加
+            xmlString = xmlString.replace(/<\?xml[^?]*\?>\s*/g, '');
+            xmlString = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + xmlString;
+
+            return xmlString;
+        }
+
+        async function writeResumeData(templateFile, sourceFile, resumeData) {
+            let zip = await copyImageToTemplate(sourceFile, templateFile, resumeData);
+
+            // const arrayBuffer = await templateFile.arrayBuffer();
+            // const zip = await JSZip.loadAsync(arrayBuffer);
+
+            // document.xmlを取得
+            const docXml = await zip.file("word/document.xml").async("text");
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(docXml, "text/xml");
+
+            // テーブルを取得
+            const tables = xmlDoc.getElementsByTagName("w:tbl");
+            if (tables.length === 0) {
+                throw new Error("テーブルが見つかりません");
+            }
+
+            // 最初のテーブル(TABLE 0)から全セルを取得
+            const table = tables[0];
+            const rows = table.getElementsByTagName("w:tr");
+            const cells = [];
+
+            for (let row of rows) {
+                const rowCells = row.getElementsByTagName("w:tc");
+                for (let cell of rowCells) {
+                    cells.push(cell);
+                }
+            }
+
+            // セルにテキストを設定する補助関数
+            function setCellText(cellIndex, text, alignment = null) {
+                if (cellIndex >= cells.length) return;
+
+                const cell = cells[cellIndex];
+                const drawings = cell.getElementsByTagName("w:drawing");
+                if (drawings.length > 0) {
+                    console.log(`セル ${cellIndex} には画像があるのでスキップします`);
+                    return;
+                }
+                const textElements = cell.getElementsByTagName("w:t");
+
+                if (textElements.length > 0) {
+                    // 既存のテキスト要素を更新
+                    textElements[0].textContent = text;
+
+                    if (text.includes(' ') || text.startsWith(' ') || text.endsWith(' ')) {
+                        textElements[0].setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
+                    }
+
+                    // 2つ目以降のテキスト要素は削除（結合されたセルの場合）
+                    for (let i = textElements.length - 1; i > 0; i--) {
+                        textElements[i].textContent = "";
+                    }
+                } else {
+                    // テキスト要素がない場合は新規作成
+                    const paragraph = cell.getElementsByTagName("w:p")[0];
+                    if (paragraph) {
+                        const run = xmlDoc.createElementNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "w:r");
+                        const t = xmlDoc.createElementNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "w:t");
+                        t.textContent = text;
+
+                        if (text.includes(' ') || text.startsWith(' ') || text.endsWith(' ')) {
+                            t.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
+                        }
+                        run.appendChild(t);
+                        paragraph.appendChild(run);
+                    }
+                }
+
+                // 配置を設定
+                if (alignment) {
+                    const paragraph = cell.getElementsByTagName("w:p")[0];
+                    if (paragraph) {
+                        let pPr = paragraph.getElementsByTagName("w:pPr")[0];
+                        if (!pPr) {
+                            pPr = xmlDoc.createElementNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "w:pPr");
+                            paragraph.insertBefore(pPr, paragraph.firstChild);
+                        }
+
+                        // 既存の配置を削除
+                        const existingJc = pPr.getElementsByTagName("w:jc");
+                        while (existingJc.length > 0) {
+                            existingJc[0].parentNode.removeChild(existingJc[0]);
+                        }
+
+                        // 新しい配置を設定（正しい方法）
+                        const jc = xmlDoc.createElementNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "w:jc");
+                        jc.setAttribute("w:val", alignment); // プレフィックスなし
+                        pPr.appendChild(jc);
+                    }
+                }
+            }
+            // 「現在」を作成日で置換
+            function replaceTextInCell(cellIndex, searchText, replaceText) {
+                if (cellIndex >= cells.length) return;
+
+                const cell = cells[cellIndex];
+                const textElements = cell.getElementsByTagName("w:t");
+
+                for (let t of textElements) {
+                    if (t.textContent.includes(searchText)) {
+                        t.textContent = t.textContent.replace(searchText, replaceText);
+
+                        if (t.textContent.includes(' ') || t.textContent.startsWith(' ') || t.textContent.endsWith(' ')) {
+                            t.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
+                        }
+                    }
+                }
+            }
+
+            // 作成日（「現在」を置換）
+            replaceTextInCell(1, "現在", resumeData.作成日);
+
+            // 基本情報
+            setCellText(3, resumeData.基本情報.ふりがな);
+            setCellText(5, resumeData.基本情報.氏名);
+            setCellText(6, resumeData.基本情報.生年月日年齢);
+            setCellText(8, resumeData.基本情報.現住所ふりがな);
+
+            // 現住所郵便番号（〒を置換）
+            replaceTextInCell(9, "〒", resumeData.基本情報.現住所郵便番号);
+
+            setCellText(10, resumeData.基本情報.現住所);
+            setCellText(12, resumeData.基本情報.Email);
+            setCellText(14, resumeData.基本情報.電話);
+
+            // 学歴・職歴・免許資格の書き込み開始位置を探す
+            let line = 15;
+
+            for (let i = line; i < cells.length; i++) {
+                const cell = cells[i];
+                const textElements = cell.getElementsByTagName("w:t");
+                let cellText = "";
+                for (let t of textElements) {
+                    cellText += t.textContent;
+                }
+
+                if (cellText.includesAll("学歴職歴")) {
+                    line = i + 1;
+
+
+                    setCellText(line + 2, "学歴", "center");
+                    line += 3;
+
+                    // 学歴を書き込み
+                    for (let item of resumeData.学歴) {
+                        setCellText(line, item.年);
+                        setCellText(line + 1, item.月);
+                        setCellText(line + 2, item.内容);
+                        line += 3;
+                    }
+                    line += 3;
+
+                    // 「職歴」ラベルを書き込み
+                    setCellText(line + 2, "職歴", "center");
+                    line += 3;
+                    if (resumeData.職歴.length > 0) {
+
+                        // 職歴を書き込み
+                        for (let item of resumeData.職歴) {
+                            setCellText(line, item.年);
+                            setCellText(line + 1, item.月);
+                            setCellText(line + 2, item.内容);
+                            line += 3;
+                        }
+                    } else {
+                        setCellText(line + 2, "なし");
+                        line += 3;
+                    }
+                    setCellText(line + 2, "以上", "right");
+
+
+                    break;
+                }
+            }
+            for (let i = line; i < cells.length; i++) {
+                const cell = cells[i];
+                const textElements = cell.getElementsByTagName("w:t");
+                let cellText = "";
+                for (let t of textElements) {
+                    cellText += t.textContent;
+                }
+
+                if (cellText.includesAll("免許資格")) {
+                    line = i + 1;
+
+                    for (let item of resumeData.免許資格) {
+                        setCellText(line, item.年);
+                        setCellText(line + 1, item.月);
+                        setCellText(line + 2, item.内容);
+                        line += 3;
+                    }
+
+                    break;
+                }
+            }
+
+            // 学生生活と自己PRを書き込み
+            let dones = { 学生生活: false, 自己PR: false };
+            for (let i = line; i < cells.length; i++) {
+                const cell = cells[i];
+                const textElements = cell.getElementsByTagName("w:t");
+                let cellText = "";
+                for (let t of textElements) {
+                    cellText += t.textContent;
+                }
+
+                if (dones.学生生活 === false && cellText.includesAll("学生生活")) {
+                    setCellText(i + 1, resumeData.学生生活);
+                    dones.学生生活 = true;
+                }
+                if (dones.自己PR === false && cellText.includesAll("自己PR")) {
+                    setCellText(i + 1, resumeData.自己PR);
+                    dones.自己PR = true;
+                }
+            }
+
+            // XMLを文字列に戻す
+            const serializer = new XMLSerializer();
+            const modifiedXml = serializer.serializeToString(xmlDoc);
+
+            // ZIPファイルを更新
+            zip.file("word/document.xml", serializeXmlWithDeclaration(xmlDoc));
+
+            // 新しいdocxファイルを生成
+            const blob = await zip.generateAsync({ type: "blob" });
+
+            // ダウンロード
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '記入済み_' + resumeData.基本情報.氏名 + '_履歴書.docx';
+            a.click();
+            URL.revokeObjectURL(url);
+
+            return blob;
+        }
+
+        extractBtn.addEventListener('click', async () => {
+            extractBtn.disabled = true;
+            extractBtn.textContent = '抽出中...';
+            extractedData = [];
+            updateWriteAllButton();
+
+            tabs.style.display = 'flex';
+            tabs.innerHTML = '';
+            tabContents.innerHTML = '';
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const tabId = `tab-${i}`;
+                const contentId = `content-${i}`;
+
+                const tab = document.createElement('button');
+                tab.id = tabId;
+                tab.className = 'tab' + (i === 0 ? ' active' : '');
+                tab.textContent = file.name.replace('.docx', '');
+                tab.onclick = () => switchTab(i);
+                tabs.appendChild(tab);
+
+                const content = document.createElement('div');
+                content.id = contentId;
+                content.className = 'tab-content' + (i === 0 ? ' active' : '');
+                content.innerHTML = '<div class="loading"><div class="spinner"></div><p>抽出中...</p></div>';
+                tabContents.appendChild(content);
+
+                try {
+                    const data = await extractResumeData(file);
+                    extractedData.push({ file, data });
+
+                    content.innerHTML = `
+                        <button id="writeDocx${i}" class="extract-btn write-btn" data-enabled-text="📃新規ワードに書き込み">
+                            📃新規ワードに書き込み
+                        </button>
+                        <div id="view-${i}">
+                            ${renderResumeData(data)}
+                        </div>
+                    `;
+                    const writeBtn = document.querySelector(`#writeDocx${i}`);
+                    writeBtn.addEventListener('click', async () => {
+                        if (!templateFile) {
+                            alert('先にテンプレートファイル（.docx）を選択してください。');
+                            return;
+                        }
+                        await writeResumeData(templateFile, file, data);
+                    });
+                    updateWriteButtons();
+                } catch (error) {
+                    console.log(error);
+                    content.innerHTML = `<div style="color: red; padding: 20px;">エラー: ${error.message}</div>`;
+                }
+            }
+
+            // 全データをコンソールに出力
+            console.log('抽出されたデータ:', extractedData);
+            window.extractedData = extractedData; // グローバル変数として保存
+
+            extractBtn.textContent = '✓ 抽出完了';
+            extractBtn.disabled = false;
+            updateWriteAllButton();
+        });
+
+        writeAllBtn.addEventListener('click', async () => {
+            if (!templateFile) {
+                alert('先にテンプレートファイル（.docx）を選択してください。');
+                return;
+            }
+
+            writeAllBtn.disabled = true;
+            writeAllBtn.textContent = 'すべてのファイルを書き込み中...';
+
+            for (const item of extractedData) {
+                await writeResumeData(templateFile, item.file, item.data);
+            }
+
+            writeAllBtn.textContent = 'すべての書き込みが完了しました';
+            updateWriteAllButton();
+        });
+
+        function switchTab(index) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            const selectedTab = document.getElementById(`tab-${index}`);
+            const selectedContent = document.getElementById(`content-${index}`);
+
+            if (selectedTab) selectedTab.classList.add('active');
+            if (selectedContent) selectedContent.classList.add('active');
+        }
+
+    </script>
+</body>
+
+</html>
