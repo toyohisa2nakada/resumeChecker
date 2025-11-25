@@ -570,30 +570,14 @@
             const contentTypesXml = await templateZip.file("[Content_Types].xml").async("text");
             const contentTypesDoc = sourceParser.parseFromString(contentTypesXml, "text/xml");
 
-            const extensionToContentType = {
-                bmp: "image/bmp",
-                gif: "image/gif",
-                jpeg: "image/jpeg",
-                jpg: "image/jpeg",
-                png: "image/png",
-                tif: "image/tiff",
-                tiff: "image/tiff"
-            };
-            const contentType = extension ? extensionToContentType[extension] || `image/${extension}` : null;
+            const mediaExtensions = getMediaExtensions(templateZip);
+            if (extension) {
+                mediaExtensions.add(extension);
+            }
 
-            if (extension && contentType) {
-                const defaults = contentTypesDoc.getElementsByTagName("Default");
-                const hasContentType = Array.from(defaults).some(defaultEl => defaultEl.getAttribute("Extension")?.toLowerCase() === extension);
-
-                if (!hasContentType) {
-                    const newDefault = contentTypesDoc.createElement("Default");
-                    newDefault.setAttribute("Extension", extension);
-                    newDefault.setAttribute("ContentType", contentType);
-                    contentTypesDoc.documentElement.appendChild(newDefault);
-
-                    const updatedContentTypesXml = serializeXmlWithDeclaration(contentTypesDoc);
-                    templateZip.file("[Content_Types].xml", updatedContentTypesXml);
-                }
+            const updatedContentTypesXml = ensureImageContentTypes(contentTypesDoc, mediaExtensions);
+            if (updatedContentTypesXml) {
+                templateZip.file("[Content_Types].xml", updatedContentTypesXml);
             }
 
             // 5. テンプレートのリレーションシップに画像を追加
@@ -618,12 +602,21 @@
             }
             const newRId = `rId${maxRId + 1}`;
 
-            // リレーションシップを追加
-            const newRel = templateRelsDoc.createElement("Relationship");
+            // リレーションシップを追加（名前空間を保持して xmlns="" を防ぐ）
+            const relNamespace = templateRelsDoc.documentElement.namespaceURI;
+            const newRel = relNamespace
+                ? templateRelsDoc.createElementNS(relNamespace, "Relationship")
+                : templateRelsDoc.createElement("Relationship");
+
             newRel.setAttribute("Id", newRId);
             newRel.setAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
             newRel.setAttribute("Target", `media/${uniqueImageFileName}`);
             templateRelsDoc.documentElement.appendChild(newRel);
+
+            const missingMedia = validateImageRelationshipTargets(templateZip, templateRelsDoc.getElementsByTagName("Relationship"));
+            if (missingMedia.length > 0) {
+                throw new Error(`以下の画像ファイルが見つかりません: ${missingMedia.join(', ')}`);
+            }
 
             // リレーションシップファイルを更新（XML宣言付き）
             const updatedRelsXml = serializeXmlWithDeclaration(templateRelsDoc);
@@ -685,6 +678,75 @@
             templateZip.file("word/document.xml", updatedDocXml);
 
             return templateZip;
+        }
+
+        function getMediaExtensions(zip) {
+            const extensions = new Set();
+            const mediaFolder = zip.folder("word/media");
+
+            mediaFolder?.forEach((relativePath, file) => {
+                if (file.dir) return;
+
+                const parts = relativePath.split('.');
+                if (parts.length > 1) {
+                    extensions.add(parts.pop().toLowerCase());
+                }
+            });
+
+            return extensions;
+        }
+
+        function ensureImageContentTypes(contentTypesDoc, extensions) {
+            const extensionToContentType = {
+                bmp: "image/bmp",
+                gif: "image/gif",
+                jpeg: "image/jpeg",
+                jpg: "image/jpeg",
+                png: "image/png",
+                tif: "image/tiff",
+                tiff: "image/tiff"
+            };
+
+            const defaults = Array.from(contentTypesDoc.getElementsByTagName("Default"));
+            const existingExtensions = new Set(defaults
+                .map(defaultEl => defaultEl.getAttribute("Extension")?.toLowerCase())
+                .filter(Boolean));
+
+            const namespace = contentTypesDoc.documentElement.namespaceURI;
+            let updated = false;
+
+            extensions.forEach(ext => {
+                if (existingExtensions.has(ext)) return;
+
+                const contentType = extensionToContentType[ext] || `image/${ext}`;
+                const newDefault = namespace
+                    ? contentTypesDoc.createElementNS(namespace, "Default")
+                    : contentTypesDoc.createElement("Default");
+
+                newDefault.setAttribute("Extension", ext);
+                newDefault.setAttribute("ContentType", contentType);
+                contentTypesDoc.documentElement.appendChild(newDefault);
+                existingExtensions.add(ext);
+                updated = true;
+            });
+
+            return updated ? serializeXmlWithDeclaration(contentTypesDoc) : null;
+        }
+
+        function validateImageRelationshipTargets(zip, relationships) {
+            const missingMedia = [];
+
+            Array.from(relationships).forEach(rel => {
+                const target = rel.getAttribute("Target");
+                if (!target || !target.startsWith("media/")) return;
+
+                const normalizedTarget = target.replace(/^\//, "");
+                if (!zip.file(`word/${normalizedTarget}`)) {
+                    missingMedia.push(normalizedTarget);
+                }
+            });
+
+            return missingMedia;
         }
 
         // XML宣言付きでシリアライズする関数
