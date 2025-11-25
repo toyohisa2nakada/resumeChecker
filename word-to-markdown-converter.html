@@ -571,7 +571,8 @@
                 const hasContentType = Array.from(defaults).some(defaultEl => defaultEl.getAttribute("Extension")?.toLowerCase() === extension);
 
                 if (!hasContentType) {
-                    const newDefault = contentTypesDoc.createElement("Default");
+                    const ctNamespace = "http://schemas.openxmlformats.org/package/2006/content-types";
+                    const newDefault = contentTypesDoc.createElementNS(ctNamespace, "Default");
                     newDefault.setAttribute("Extension", extension);
                     newDefault.setAttribute("ContentType", contentType);
                     contentTypesDoc.documentElement.appendChild(newDefault);
@@ -596,7 +597,8 @@
             const newRId = `rId${maxRId + 1}`;
 
             // リレーションシップを追加
-            const newRel = templateRelsDoc.createElement("Relationship");
+            const relNamespace = "http://schemas.openxmlformats.org/package/2006/relationships";
+            const newRel = templateRelsDoc.createElementNS(relNamespace, "Relationship");
             newRel.setAttribute("Id", newRId);
             newRel.setAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
             newRel.setAttribute("Target", `media/${imageFileName}`);
