@@ -306,6 +306,10 @@
             ✓ データ抽出を開始
         </button>
 
+        <button id="writeAllBtn" class="extract-btn" style="display: none;">
+            📝 すべてのファイルをテンプレートに書き込み
+        </button>
+
         <div id="tabs" class="tabs" style="display: none;"></div>
         <div id="tabContents"></div>
     </div>
@@ -318,10 +322,12 @@
         const templateInfo = document.getElementById('templateInfo');
         const fileList = document.getElementById('fileList');
         const extractBtn = document.getElementById('extractBtn');
+        const writeAllBtn = document.getElementById('writeAllBtn');
         const tabs = document.getElementById('tabs');
         const tabContents = document.getElementById('tabContents');
         let files = [];
         let templateFile = null;
+        let extractedData = [];
 
         dropZone.addEventListener('click', () => fileInput.click());
         templateDropZone.addEventListener('click', () => templateInput.click());
@@ -382,6 +388,7 @@
                 templateInfo.style.color = '#999';
             }
             updateWriteButtons();
+            updateWriteAllButton();
         }
 
         function displayFileList() {
@@ -415,6 +422,27 @@
                     btn.textContent = 'テンプレートを選択してください';
                 }
             });
+        }
+
+        function updateWriteAllButton() {
+            if (extractedData.length === 0) {
+                writeAllBtn.style.display = 'none';
+                return;
+            }
+
+            writeAllBtn.style.display = 'block';
+
+            if (!writeAllBtn.dataset.enabledText) {
+                writeAllBtn.dataset.enabledText = writeAllBtn.textContent;
+            }
+
+            if (templateFile) {
+                writeAllBtn.disabled = false;
+                writeAllBtn.textContent = writeAllBtn.dataset.enabledText;
+            } else {
+                writeAllBtn.disabled = true;
+                writeAllBtn.textContent = 'テンプレートを選択してください';
+            }
         }
 
         function removeFile(index) {
@@ -1074,12 +1102,12 @@
         extractBtn.addEventListener('click', async () => {
             extractBtn.disabled = true;
             extractBtn.textContent = '抽出中...';
+            extractedData = [];
+            updateWriteAllButton();
 
             tabs.style.display = 'flex';
             tabs.innerHTML = '';
             tabContents.innerHTML = '';
-
-            const extractedData = [];
 
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
@@ -1101,7 +1129,7 @@
 
                 try {
                     const data = await extractResumeData(file);
-                    extractedData.push({ filename: file.name, data: data });
+                    extractedData.push({ file, data });
 
                     content.innerHTML = `
                         <button id="writeDocx${i}" class="extract-btn write-btn" data-enabled-text="📃新規ワードに書き込み">
@@ -1132,6 +1160,24 @@
 
             extractBtn.textContent = '✓ 抽出完了';
             extractBtn.disabled = false;
+            updateWriteAllButton();
+        });
+
+        writeAllBtn.addEventListener('click', async () => {
+            if (!templateFile) {
+                alert('先にテンプレートファイル（.docx）を選択してください。');
+                return;
+            }
+
+            writeAllBtn.disabled = true;
+            writeAllBtn.textContent = 'すべてのファイルを書き込み中...';
+
+            for (const item of extractedData) {
+                await writeResumeData(templateFile, item.file, item.data);
+            }
+
+            writeAllBtn.textContent = 'すべての書き込みが完了しました';
+            updateWriteAllButton();
         });
 
         function switchTab(index) {
