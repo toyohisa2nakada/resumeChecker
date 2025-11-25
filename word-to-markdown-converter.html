@@ -602,8 +602,12 @@
             }
             const newRId = `rId${maxRId + 1}`;
 
-            // リレーションシップを追加
-            const newRel = templateRelsDoc.createElement("Relationship");
+            // リレーションシップを追加（名前空間を保持して xmlns="" を防ぐ）
+            const relNamespace = templateRelsDoc.documentElement.namespaceURI;
+            const newRel = relNamespace
+                ? templateRelsDoc.createElementNS(relNamespace, "Relationship")
+                : templateRelsDoc.createElement("Relationship");
+
             newRel.setAttribute("Id", newRId);
             newRel.setAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
             newRel.setAttribute("Target", `media/${uniqueImageFileName}`);
