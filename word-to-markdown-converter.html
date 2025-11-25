@@ -571,8 +571,7 @@
                 const hasContentType = Array.from(defaults).some(defaultEl => defaultEl.getAttribute("Extension")?.toLowerCase() === extension);
 
                 if (!hasContentType) {
-                    const ctNamespace = "http://schemas.openxmlformats.org/package/2006/content-types";
-                    const newDefault = contentTypesDoc.createElementNS(ctNamespace, "Default");
+                    const newDefault = contentTypesDoc.createElement("Default");
                     newDefault.setAttribute("Extension", extension);
                     newDefault.setAttribute("ContentType", contentType);
                     contentTypesDoc.documentElement.appendChild(newDefault);
@@ -597,8 +596,7 @@
             const newRId = `rId${maxRId + 1}`;
 
             // リレーションシップを追加
-            const relNamespace = "http://schemas.openxmlformats.org/package/2006/relationships";
-            const newRel = templateRelsDoc.createElementNS(relNamespace, "Relationship");
+            const newRel = templateRelsDoc.createElement("Relationship");
             newRel.setAttribute("Id", newRId);
             newRel.setAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
             newRel.setAttribute("Target", `media/${imageFileName}`);
@@ -671,10 +669,9 @@
             const serializer = new XMLSerializer();
             let xmlString = serializer.serializeToString(xmlDoc);
 
-            // XML宣言を追加（存在しない場合）
-            if (!xmlString.startsWith('<?xml')) {
-                xmlString = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + xmlString;
-            }
+            // 既存のXML宣言を削除してから新しいものを追加
+            xmlString = xmlString.replace(/<\?xml[^?]*\?>\s*/g, '');
+            xmlString = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + xmlString;
 
             return xmlString;
         }
@@ -752,23 +749,21 @@
                 if (alignment) {
                     const paragraph = cell.getElementsByTagName("w:p")[0];
                     if (paragraph) {
-                        // 既存のw:pPr（段落プロパティ）を取得または作成
                         let pPr = paragraph.getElementsByTagName("w:pPr")[0];
                         if (!pPr) {
                             pPr = xmlDoc.createElementNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "w:pPr");
                             paragraph.insertBefore(pPr, paragraph.firstChild);
                         }
 
-                        // 既存のw:jc（配置）を削除
+                        // 既存の配置を削除
                         const existingJc = pPr.getElementsByTagName("w:jc");
                         while (existingJc.length > 0) {
                             existingJc[0].parentNode.removeChild(existingJc[0]);
                         }
 
-                        // 新しい配置を設定
-                        // 新しい配置を設定
+                        // 新しい配置を設定（正しい方法）
                         const jc = xmlDoc.createElementNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "w:jc");
-                        jc.setAttribute("w:val", alignment);
+                        jc.setAttribute("w:val", alignment); // プレフィックスなし
                         pPr.appendChild(jc);
                     }
                 }
